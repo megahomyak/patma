@@ -1,26 +1,44 @@
-use std::borrow::Borrow;
-
 pub struct Pattern {
     regex: regex::Regex,
 }
 
-pub enum PatternPart {
-    VerbatimString(String),
+enum PatternPart {
+    VerbatimChar(char),
     AnyCharacter,
     AnySequence,
 }
 
 pub enum PatternCreationError {
-    TwoAdjacentAnySequences,
+    AdjacentStars,
+}
+
+fn take_one_char(s: &str) -> Option<(char, &str)> {
+    let mut chars = s.chars();
+    chars.next().map(|c| (c, chars.as_str()))
+}
+
+fn parse_one_char(s: &str) -> Option<(PatternPart, &str)> {
+    take_one_char(s).map(|(c, rest)| match c {
+        '*' => (PatternPart::AnySequence, rest),
+        '.' => (PatternPart::AnyCharacter, rest),
+        '\\' => match take_one_char(rest) {
+            Some((next_c, next_rest)) => match next_c {
+                '*' | '.' | '\\' => (PatternPart::VerbatimChar(next_c), next_rest),
+                _ => (PatternPart::VerbatimChar(c), rest),
+            },
+            None => (PatternPart::VerbatimChar(c), rest),
+        },
+        _ => (PatternPart::VerbatimChar(c), rest),
+    })
 }
 
 impl Pattern {
-    pub fn new(first_char: char, middle_parts: &[PatternPart], last_char: char) -> Result<Self, PatternCreationError> {
+    pub fn new(pattern: &str) -> Result<Self, PatternCreationError> {
         let mut regex = String::new();
         regex.push_str(&regex::escape(first_char));
         for part in middle_parts {
             match part {
-                PatternPart::VerbatimString(string) => regex.push_str()
+                PatternPart::VerbatimString(string) => regex.push_str(),
             }
             regex.push_str(r"([^\(\);]*)");
             regex.push_str(&regex::escape(part));
@@ -31,56 +49,6 @@ impl Pattern {
         Self {
             regex: regex::Regex::new(&regex).unwrap(),
         }
-    }
-}
-
-pub struct Pattern {
-    regex: regex::Regex,
-}
-
-pub enum SubstitutionPatternKind {
-    OneCharacter,
-    AnyAmountOfCharacters,
-}
-
-pub struct NonEmptyString {
-    pub first_character: char,
-    pub rest: String,
-}
-
-impl<T: Borrow<NonEmptyString>> From<T> for String {
-    fn from(string: T) -> Self {
-        format!("{}{}", string.first_character, string.rest)
-    }
-}
-
-pub struct SubstitutionPattern {
-    pub kind: SubstitutionPatternKind,
-    pub next_substring: NonEmptyString,
-}
-
-impl Pattern {
-    pub fn new(first_part: &NonEmptyString, rest: &[&SubstitutionPattern]) -> Self {
-        let first_part: String = first_part.into();
-        let mut regex = String::new();
-        regex.push_str(&regex::escape(first_part));
-        for part in rest {
-            regex.push_str(r"([^\(\);]*)");
-            regex.push_str(&regex::escape(part));
-        }
-        Self {
-            regex: regex::Regex::new(&regex).unwrap(),
-        }
-    }
-}
-
-pub struct Matches<'a> {
-    contents: Vec<&'a str>,
-}
-
-impl<'a> Matches<'a> {
-    pub fn get(&self, index: usize) -> &str {
-        self.contents.get(index).unwrap_or(&"")
     }
 }
 
